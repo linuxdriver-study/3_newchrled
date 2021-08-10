@@ -3,6 +3,7 @@
 #include <linux/cdev.h>
 #include <linux/io.h>
 #include <linux/ide.h>
+#include <linux/device.h>
 
 #define NEWCHRDEV_NAME          "newchrdev"
 #define NEWCHRDEV_COUNT         1
@@ -29,10 +30,12 @@ static ssize_t newchrled_write(struct file *file, const char __user *user, size_
 static int newchrled_release(struct inode *inode, struct file *file);
 
 struct newchrled_dev {
-        struct cdev led_cdev;  /* 字符设备结构体 */
-        dev_t devid;    /* 设备号 */
-        int major;      /* 主设备号 */
-        int minor;      /* 次设备号 */
+        struct cdev led_cdev;   /* 字符设备结构体 */
+        struct class *class;    /* 类 */
+        struct device *device;  /* 设备 */
+        dev_t devid;            /* 设备号 */
+        int major;              /* 主设备号 */
+        int minor;              /* 次设备号 */
 };
 static struct newchrled_dev newchrdev;
 
@@ -149,6 +152,21 @@ static int __init led_init(void)
         newchrdev.led_cdev.ops = &led_ops,
         cdev_init(&newchrdev.led_cdev, &led_ops);
         cdev_add(&newchrdev.led_cdev, newchrdev.devid, NEWCHRDEV_COUNT);
+
+        /* 自动创建设备节点 */
+        /* 1.申请类 */
+        newchrdev.class = class_create(THIS_MODULE, NEWCHRDEV_NAME);
+        if (IS_ERR(newchrdev.class)) {
+		ret = PTR_ERR(newchrdev.class);
+		goto error;
+	}
+        /* 2.创建设备 */
+        newchrdev.device = device_create(newchrdev.class, NULL, 
+                                         newchrdev.devid, NULL, NEWCHRDEV_NAME);
+        if (IS_ERR(newchrdev.device)) {
+		ret = PTR_ERR(newchrdev.device);
+		goto error;
+	};
 error:
         return 0;
 }
@@ -157,6 +175,9 @@ static void __exit led_exit(void)
 {
         printk("newchrled exit!\n");
         led_switch(LED_OFF);
+
+        device_destroy(newchrdev.class, newchrdev.devid);
+        class_destroy(newchrdev.class);
         unregister_chrdev_region(newchrdev.devid, NEWCHRDEV_COUNT);
         cdev_del(&newchrdev.led_cdev);
 }
