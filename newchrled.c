@@ -94,6 +94,8 @@ static void led_gpio_init(void)
 static int newchrled_open(struct inode *inode, struct file *file)
 {
         printk("led open!\n");
+        file->private_data = &newchrdev;
+
         return 0;
 }
 
@@ -101,6 +103,8 @@ static ssize_t newchrled_write(struct file *file, const char __user *user, size_
 {
         int ret = 0;
         unsigned char buf[1];
+        struct newchrled_dev *led_dev = file->private_data;
+
         ret = copy_from_user(buf, user, 1);
         if (ret < 0) {
                 printk("kernel write failed!\n");
@@ -121,6 +125,7 @@ error:
 static int newchrled_release(struct inode *inode, struct file *file)
 {
         printk("led release!\n");
+        file->private_data = NULL;
         return 0;
 }
 
@@ -143,7 +148,7 @@ static int __init led_init(void)
         }
         if (ret < 0) {
                 printk("newchrdev led region err:%d!\n", ret);
-                goto error;
+                goto region_error;
         }
         printk("major:%d minor:%d\n", newchrdev.major, newchrdev.minor);
 
@@ -158,17 +163,25 @@ static int __init led_init(void)
         newchrdev.class = class_create(THIS_MODULE, NEWCHRDEV_NAME);
         if (IS_ERR(newchrdev.class)) {
 		ret = PTR_ERR(newchrdev.class);
-		goto error;
+		goto class_create_error;
 	}
         /* 2.创建设备 */
         newchrdev.device = device_create(newchrdev.class, NULL, 
                                          newchrdev.devid, NULL, NEWCHRDEV_NAME);
         if (IS_ERR(newchrdev.device)) {
 		ret = PTR_ERR(newchrdev.device);
-		goto error;
+		goto device_create_error;
 	};
-error:
-        return 0;
+        goto success;
+        
+device_create_error:
+        class_destroy(newchrdev.class);
+class_create_error:
+        unregister_chrdev_region(newchrdev.devid, NEWCHRDEV_COUNT);
+        cdev_del(&newchrdev.led_cdev);
+region_error:
+success:
+        return ret;
 }
 
 static void __exit led_exit(void)
