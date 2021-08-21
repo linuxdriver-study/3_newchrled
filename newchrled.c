@@ -189,6 +189,12 @@ static void __exit led_exit(void)
         printk("newchrled exit!\n");
         led_switch(LED_OFF);
 
+        iounmap(CCM_CCGR1);
+        iounmap(SW_MUX_GPIO1_IO03);
+        iounmap(SW_PAD_GPIO1_IO03);
+        iounmap(GPIO1_DR);
+        iounmap(GPIO1_DIR);
+
         device_destroy(newchrdev.class, newchrdev.devid);
         class_destroy(newchrdev.class);
         unregister_chrdev_region(newchrdev.devid, NEWCHRDEV_COUNT);
